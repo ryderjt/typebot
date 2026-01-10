@@ -6,9 +6,16 @@
 //
 
 import SwiftUI
+import ApplicationServices
 
 @main
 struct Type_BotApp: App {
+    init() {
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [promptKey: true] as CFDictionary
+        AXIsProcessTrustedWithOptions(options)
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
