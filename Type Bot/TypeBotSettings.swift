@@ -138,7 +138,7 @@ final class TypeBotSettings: ObservableObject {
         static let correctionJitterMin = 0.6
         static let correctionJitterMax = 1.05
     }
-    @Published var isDarkMode: Bool { didSet { UserDefaults.standard.set(isDarkMode, forKey: "typebot.isDarkMode") } }
+    @Published var isDarkMode: Bool = true
     @Published var typingSpeed: Double { didSet { UserDefaults.standard.set(typingSpeed, forKey: "typebot.typingSpeed") } }
     @Published var activationDelay: Double { didSet { UserDefaults.standard.set(activationDelay, forKey: "typebot.activationDelay") } }
     @Published var useBoldShortcut: Bool { didSet { UserDefaults.standard.set(useBoldShortcut, forKey: "typebot.useBoldShortcut") } }
@@ -216,7 +216,6 @@ final class TypeBotSettings: ObservableObject {
     @Published var stopKeyBinding: KeyBinding { didSet { saveKeyBinding(stopKeyBinding, key: "typebot.stopKeyBinding") } }
     
     init() {
-        isDarkMode = UserDefaults.standard.object(forKey: "typebot.isDarkMode") as? Bool ?? true
         typingSpeed = UserDefaults.standard.object(forKey: "typebot.typingSpeed") as? Double ?? 120
         activationDelay = UserDefaults.standard.object(forKey: "typebot.activationDelay") as? Double ?? 0.6
         useBoldShortcut = UserDefaults.standard.object(forKey: "typebot.useBoldShortcut") as? Bool ?? true

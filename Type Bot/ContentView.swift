@@ -25,34 +25,43 @@ struct ContentView: View {
     @State private var didPrewarmBlur = false
     @State private var workspaceObserver: Any?
     @State private var showHumanizeSettings = false
-    @State private var showHumanizePreload = false
-    @State private var humanizePreloadProgress = 0.0
-    @State private var humanizePreloadMessage = "Preparing Realistic Settings"
     @State private var didPreloadHumanizeSettings = false
     @State private var humanizePreloadTask: Task<Void, Never>?
+    private let popupAnimation: Animation = .linear(duration: 0.12)
+    private var palette: Palette { Palette(isDarkMode: settings.isDarkMode) }
+    private let savedRichTextURL: URL = {
+        let fm = FileManager.default
+        let appSupport = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
+        let directory = appSupport?.appendingPathComponent("Type Bot", isDirectory: true)
+        if let directory {
+            try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+            return directory.appendingPathComponent("lastDocument.rtf")
+        }
+        return fm.temporaryDirectory.appendingPathComponent("typebot-lastDocument.rtf")
+    }()
     
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: settings.isDarkMode ?
-                    [Color(red: 0.08, green: 0.08, blue: 0.08), Color(red: 0.05, green: 0.05, blue: 0.05)] :
-                    [Color(red: 0.98, green: 0.98, blue: 0.98), Color(red: 0.94, green: 0.94, blue: 0.94)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            backgroundLayer
             
             VStack(spacing: 18) {
-                header
                 editorCard
                 controlsRow
-                Spacer(minLength: 0)
                 statusRow
             }
-            .padding(24)
-            .animation(.easeInOut(duration: 0.4), value: settings.isDarkMode)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
             .blur(radius: blurRadius)
             .saturation(showBackdrop ? 0.9 : 1)
+
+            SettingsPanelView(isPresented: $showSettings, settings: settings)
+                .padding(.vertical, 40)
+                .padding(.horizontal, 24)
+                .opacity(showSettings ? 1 : 0)
+                .allowsHitTesting(showSettings)
+                .accessibilityHidden(!showSettings)
+                .animation(popupAnimation, value: showSettings)
+                .zIndex(2)
             
             if showBackdrop {
                 Color.black.opacity(settings.isDarkMode ? 0.08 : 0.04)
@@ -60,12 +69,6 @@ struct ContentView: View {
                     .onTapGesture {
                         dismissPopups()
                     }
-            }
-            
-            if showSettings {
-                SettingsPanelView(isPresented: $showSettings, settings: settings)
-                    .padding(.vertical, 40)
-                    .padding(.horizontal, 24)
             }
             
             if showAccessibilityPrompt {
@@ -82,21 +85,8 @@ struct ContentView: View {
                 .opacity(showHumanizeSettings ? 1 : 0)
                 .allowsHitTesting(showHumanizeSettings)
                 .accessibilityHidden(!showHumanizeSettings)
-
-            if showHumanizePreload {
-                HumanizeSettingsView(isPresented: .constant(false), settings: settings)
-                    .opacity(0.001)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                HumanizePreloadView(
-                    isDarkMode: settings.isDarkMode,
-                    progress: humanizePreloadProgress,
-                    message: humanizePreloadMessage
-                )
-                .padding(.vertical, 40)
-                .padding(.horizontal, 24)
-                .transition(.opacity.combined(with: .scale))
-            }
+                .animation(popupAnimation, value: showHumanizeSettings)
+                .zIndex(3)
         }
         .frame(minWidth: 760, minHeight: 620)
         .sheet(isPresented: $showAppPicker) {
@@ -113,6 +103,7 @@ struct ContentView: View {
             setupKeyMonitor()
             setupWorkspaceMonitor()
             prewarmBlurIfNeeded()
+            loadSavedRichText()
             if didPreloadHumanizeSettings == false {
                 startHumanizePreload()
             }
@@ -124,9 +115,6 @@ struct ContentView: View {
             updateBackdrop()
         }
         .onChange(of: showHumanizeSettings) { _, _ in
-            updateBackdrop()
-        }
-        .onChange(of: showHumanizePreload) { _, _ in
             updateBackdrop()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -143,52 +131,68 @@ struct ContentView: View {
         }
     }
     
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Type Bot")
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(settings.isDarkMode ? .white : .black)
-                Text("Paste rich text, pick a window, and let Type Bot do the typing.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(settings.isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
-            }
+    private var backgroundLayer: some View {
+        ZStack {
+            LinearGradient(
+                colors: palette.background,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                gradient: Gradient(colors: [palette.glow.opacity(0.4), .clear]),
+                center: .topTrailing,
+                startRadius: 40,
+                endRadius: 420
+            )
+            .blur(radius: 60)
+            RadialGradient(
+                gradient: Gradient(colors: [palette.accent.opacity(0.18), .clear]),
+                center: .bottomLeading,
+                startRadius: 20,
+                endRadius: 360
+            )
+            .blur(radius: 40)
             
-            Spacer()
+            Circle()
+                .fill(palette.accent.opacity(0.08))
+                .frame(width: 320, height: 320)
+                .blur(radius: 72)
+                .offset(x: -260, y: -180)
             
-            Button {
-                presentSettings()
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(settings.isDarkMode ? .white : .black)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(settings.isDarkMode ? Color.white.opacity(0.1) : Color.black.opacity(0.06))
-                    )
-            }
-            .buttonStyle(.plain)
+            Circle()
+                .fill(palette.glow.opacity(0.08))
+                .frame(width: 260, height: 260)
+                .blur(radius: 72)
+                .offset(x: 220, y: 180)
         }
+        .ignoresSafeArea()
     }
     
     private var editorCard: some View {
         EditorCardView(
             isDarkMode: settings.isDarkMode,
-            richText: $richText,
+            richText: persistedRichTextBinding,
             controller: editorController
         )
     }
     
     private var controlsRow: some View {
         HStack(spacing: 14) {
-            actionButton(title: engine.isTyping ? "Restart" : "Start", systemImage: "play.fill", color: Color(red: 0.2, green: 0.8, blue: 0.5)) {
+            actionButton(
+                title: engine.isTyping ? "Restart" : "Start",
+                systemImage: "play.fill",
+                gradient: [palette.success, palette.success.opacity(0.85)]
+            ) {
                 if engine.isTyping {
                     engine.stop()
                 }
                 showAppPicker = true
             }
-            actionButton(title: engine.isPaused ? "Resume" : "Pause", systemImage: engine.isPaused ? "play.fill" : "pause.fill", color: Color(red: 0.95, green: 0.75, blue: 0.2)) {
+            actionButton(
+                title: engine.isPaused ? "Resume" : "Pause",
+                systemImage: engine.isPaused ? "play.fill" : "pause.fill",
+                gradient: [palette.warning, palette.warning.opacity(0.85)]
+            ) {
                 if engine.isPaused, let app = selectedApp {
                     app.activate(options: [.activateAllWindows])
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
@@ -198,35 +202,61 @@ struct ContentView: View {
                     engine.pause()
                 }
             }
-            actionButton(title: "Stop", systemImage: "stop.fill", color: Color(red: 0.95, green: 0.35, blue: 0.3)) {
+            actionButton(
+                title: "Stop",
+                systemImage: "stop.fill",
+                gradient: [palette.danger, palette.danger.opacity(0.85)]
+            ) {
                 engine.stop()
             }
             
             Spacer()
             
-            HStack(spacing: 8) {
-                Toggle("Realistic", isOn: $settings.humanizeEnabled)
-                    .toggleStyle(.checkbox)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(settings.isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
+            HStack(spacing: 10) {
+                Toggle(isOn: $settings.humanizeEnabled) {
+                    Text("Realistic")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(palette.primaryText)
+                }
+                .toggleStyle(.switch)
+                .tint(palette.accent)
+                
                 Button {
-                    showHumanizeSettings = true
+                    presentHumanizeSettings()
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(settings.isDarkMode ? .white.opacity(0.8) : .black.opacity(0.7))
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(settings.isDarkMode ? Color.white.opacity(0.1) : Color.black.opacity(0.08))
-                        )
+                    HStack(spacing: 6) {
+                        Image(systemName: "slider.horizontal.3")
+                        Text("Tune")
+                            .fontWeight(.semibold)
+                    }
+                    .font(.system(size: 12, design: .rounded))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(palette.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(palette.surfaceStroke, lineWidth: 1)
+                            )
+                    )
                 }
                 .buttonStyle(.plain)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(palette.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(palette.surfaceStroke, lineWidth: 1)
+                    )
+            )
         }
     }
     
-    private func actionButton(title: String, systemImage: String, color: Color, action: @escaping () -> Void) -> some View {
+    private func actionButton(title: String, systemImage: String, gradient: [Color], action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage)
@@ -239,15 +269,14 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(
-                        LinearGradient(
-                            colors: [color, color.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .shadow(color: gradient.first?.opacity(0.35) ?? .clear, radius: 14, x: 0, y: 8)
             )
-            .shadow(color: color.opacity(0.35), radius: 12, x: 0, y: 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                    .blendMode(.overlay)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -256,21 +285,30 @@ struct ContentView: View {
         HStack(spacing: 12) {
             Text(engine.statusText)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(settings.isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
+                .foregroundStyle(palette.secondaryText)
             Spacer()
             if let selectedAppName = selectedApp?.localizedName {
                 Text("Target: \(selectedAppName)")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(settings.isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText)
             }
             HStack(spacing: 8) {
                 Image(systemName: accessGranted ? "checkmark.shield.fill" : "exclamationmark.triangle.fill")
-                    .foregroundColor(accessGranted ? .green : .orange)
+                    .foregroundColor(accessGranted ? palette.accent : palette.warning)
                 Text(accessGranted ? "Accessibility enabled" : "Enable Accessibility for typing")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(settings.isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
+                    .foregroundStyle(palette.secondaryText)
             }
         }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(palette.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(palette.surfaceStroke, lineWidth: 1)
+                )
+        )
     }
     
     private func setupKeyMonitor() {
@@ -353,31 +391,60 @@ struct ContentView: View {
             NSWorkspace.shared.open(url)
         }
     }
-
-    private func presentSettings() {
-        showBackdrop = true
-        blurRadius = 4
-        showSettings = true
-    }
     
-    private func dismissPopups() {
-        showSettings = false
-        showAccessibilityPrompt = false
-        showHumanizeSettings = false
-        showHumanizePreload = false
-        humanizePreloadTask?.cancel()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            updateBackdrop()
+    private func presentSettings() {
+        withAnimation(popupAnimation) {
+            showBackdrop = true
+            blurRadius = 4
+            showSettings = true
         }
     }
     
-    private func updateBackdrop() {
-        if showSettings || showAccessibilityPrompt || showHumanizeSettings || showHumanizePreload {
-            showBackdrop = true
-            blurRadius = 4
+    private func presentHumanizeSettings() {
+        humanizePreloadTask?.cancel()
+        didPreloadHumanizeSettings = true
+        showBackdrop = true
+        blurRadius = 4
+        withAnimation(popupAnimation) {
+            showHumanizeSettings = true
+        }
+    }
+    
+    private func dismissPopups() {
+        withAnimation(popupAnimation) {
+            showSettings = false
+            showAccessibilityPrompt = false
+        }
+        withAnimation(popupAnimation) {
+            showHumanizeSettings = false
+        }
+        humanizePreloadTask?.cancel()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            updateBackdrop(animated: true)
+        }
+    }
+    
+    private func updateBackdrop(animated: Bool = false) {
+        if showSettings || showAccessibilityPrompt || showHumanizeSettings {
+            if animated {
+                withAnimation(popupAnimation) {
+                    showBackdrop = true
+                    blurRadius = 4
+                }
+            } else {
+                showBackdrop = true
+                blurRadius = 4
+            }
         } else {
-            showBackdrop = false
-            blurRadius = 0
+            if animated {
+                withAnimation(popupAnimation) {
+                    showBackdrop = false
+                    blurRadius = 0
+                }
+            } else {
+                showBackdrop = false
+                blurRadius = 0
+            }
         }
     }
     
@@ -395,13 +462,40 @@ struct ContentView: View {
         }
     }
 
+    private var persistedRichTextBinding: Binding<NSAttributedString> {
+        Binding(
+            get: { richText },
+            set: { newValue in
+                richText = newValue
+                saveRichText(newValue)
+            }
+        )
+    }
+
+    private func loadSavedRichText() {
+        guard let data = try? Data(contentsOf: savedRichTextURL) else { return }
+        if let loaded = try? NSAttributedString(
+            data: data,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        ) {
+            richText = loaded
+            DispatchQueue.main.async {
+                editorController.refreshFormattingState()
+            }
+        }
+    }
+
+    private func saveRichText(_ text: NSAttributedString) {
+        guard let data = try? text.data(
+            from: NSRange(location: 0, length: text.length),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+        ) else { return }
+        try? data.write(to: savedRichTextURL, options: .atomic)
+    }
+
     private func startHumanizePreload() {
         humanizePreloadTask?.cancel()
-        humanizePreloadProgress = 0
-        humanizePreloadMessage = "Preparing Realistic Settings"
-        showBackdrop = true
-        blurRadius = 4
-        showHumanizePreload = true
 
         let steps: [(String, Double)] = [
             ("Loading layout engine", 0.12),
@@ -414,15 +508,10 @@ struct ContentView: View {
         humanizePreloadTask = Task { @MainActor in
             for (message, progress) in steps {
                 guard !Task.isCancelled else { return }
-                humanizePreloadMessage = message
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    humanizePreloadProgress = progress
-                }
+                _ = (message, progress) // still iterate to keep timing, but silent
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
             didPreloadHumanizeSettings = true
-            showHumanizePreload = false
-            updateBackdrop()
         }
     }
 }
@@ -431,97 +520,345 @@ struct ContentView: View {
     ContentView()
 }
 
+private struct Palette {
+    let isDarkMode: Bool
+    
+    var background: [Color] {
+        if isDarkMode {
+            return [
+                Color(red: 0.08, green: 0.1, blue: 0.14),
+                Color(red: 0.05, green: 0.06, blue: 0.1)
+            ]
+        }
+        return [
+            Color(red: 0.76, green: 0.8, blue: 0.88),
+            Color(red: 0.64, green: 0.7, blue: 0.78)
+        ]
+    }
+    
+    var surface: Color {
+        if isDarkMode {
+            return Color(red: 0.14, green: 0.17, blue: 0.22, opacity: 0.92)
+        }
+        return Color(red: 0.89, green: 0.92, blue: 0.96, opacity: 0.94)
+    }
+    
+    var surfaceStroke: Color {
+        if isDarkMode {
+            return Color(red: 0.26, green: 0.32, blue: 0.42, opacity: 0.5)
+        }
+        return Color(red: 0.6, green: 0.66, blue: 0.76, opacity: 0.45)
+    }
+    
+    var primaryText: Color {
+        if isDarkMode {
+            return Color(red: 0.9, green: 0.93, blue: 0.98)
+        }
+        return Color(red: 0.16, green: 0.2, blue: 0.28)
+    }
+    
+    var secondaryText: Color {
+        if isDarkMode {
+            return Color(red: 0.76, green: 0.8, blue: 0.88)
+        }
+        return Color(red: 0.3, green: 0.35, blue: 0.44)
+    }
+    
+    var accent: Color {
+        Color(red: 0.48, green: 0.68, blue: 0.92)
+    }
+    
+    var success: Color {
+        Color(red: 0.24, green: 0.78, blue: 0.62)
+    }
+    
+    var glow: Color {
+        Color(red: 0.28, green: 0.42, blue: 0.6)
+    }
+    
+    var warning: Color {
+        Color(red: 0.98, green: 0.73, blue: 0.32)
+    }
+    
+    var danger: Color {
+        Color(red: 0.98, green: 0.36, blue: 0.4)
+    }
+    
+    var shadow: Color {
+        isDarkMode ? Color.black.opacity(0.45) : Color.black.opacity(0.12)
+    }
+}
+
 struct EditorCardView: View {
     let isDarkMode: Bool
     @Binding var richText: NSAttributedString
     @ObservedObject var controller: RichTextController
     
+    private let fontFamilies: [String] = [
+        "SF Pro Text",
+        "SF Pro Rounded",
+        "Avenir Next",
+        "Helvetica Neue",
+        "Times New Roman",
+        "Georgia",
+        "Futura",
+        "Menlo",
+        "Courier New",
+        "Hoefler Text"
+    ]
+    private let lineSpacingPresets: [CGFloat] = [1.0, 1.15, 1.18, 1.35, 1.6]
+    
     var body: some View {
-        let toolbarBackground = isDarkMode ? Color.white.opacity(0.08) : Color.white.opacity(0.6)
-        let editorBackground = isDarkMode ? Color.black.opacity(0.35) : Color.white.opacity(0.9)
-        let editorStroke = isDarkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.08)
-        let cardBackground = isDarkMode ? Color.white.opacity(0.06) : Color.black.opacity(0.05)
-        let cardStroke = isDarkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.1)
-        let cardShadow = isDarkMode ? Color.black.opacity(0.4) : Color.black.opacity(0.1)
+        let cardBackground = isDarkMode
+            ? Color(red: 0.14, green: 0.17, blue: 0.22, opacity: 0.94)
+            : Color(red: 0.88, green: 0.91, blue: 0.95, opacity: 0.96)
+        let cardStroke = isDarkMode
+            ? Color(red: 0.26, green: 0.32, blue: 0.42, opacity: 0.6)
+            : Color(red: 0.62, green: 0.68, blue: 0.78, opacity: 0.45)
+        let cardShadow = isDarkMode ? Color.black.opacity(0.5) : Color.black.opacity(0.16)
+        let accent = Color(red: 0.48, green: 0.68, blue: 0.92)
+        let documentBackground = isDarkMode
+            ? Color(red: 0.11, green: 0.14, blue: 0.18)
+            : Color(red: 0.92, green: 0.95, blue: 0.98)
+        let documentStroke = isDarkMode
+            ? Color(red: 0.28, green: 0.32, blue: 0.42, opacity: 0.7)
+            : Color(red: 0.72, green: 0.78, blue: 0.86, opacity: 0.5)
         
-        let toolbarShape = UnevenRoundedRectangle(
-            topLeadingRadius: 18,
-            bottomLeadingRadius: 0,
-            bottomTrailingRadius: 0,
-            topTrailingRadius: 18
-        )
-        let editorShape = UnevenRoundedRectangle(
-            topLeadingRadius: 0,
-            bottomLeadingRadius: 18,
-            bottomTrailingRadius: 18,
-            topTrailingRadius: 0
-        )
-        let cardShape = RoundedRectangle(cornerRadius: 22)
-        
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text("Formatting")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(isDarkMode ? .white.opacity(0.6) : .black.opacity(0.6))
-                
-                Spacer()
-                
-                toolbarButton(icon: "bold", isActive: controller.isBold, action: controller.toggleBold)
-                toolbarButton(icon: "italic", isActive: controller.isItalic, action: controller.toggleItalic)
-                toolbarButton(icon: "underline", isActive: controller.isUnderline, action: controller.toggleUnderline)
-                toolbarButton(icon: "strikethrough", isActive: controller.isStrikethrough, action: controller.toggleStrikethrough)
-                toolbarButton(icon: "textformat", isActive: false, action: controller.clearFormatting)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                toolbarShape.fill(toolbarBackground)
+        VStack(alignment: .leading, spacing: 12) {
+            formattingToolbar(accent: accent)
+            editorCanvas(
+                documentBackground: documentBackground,
+                documentStroke: documentStroke,
+                accent: accent
             )
-            .overlay(
-                Rectangle()
-                    .fill(editorStroke)
-                    .frame(height: 1)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-            )
-            
-            RichTextEditor(text: $richText, controller: controller, isDarkMode: isDarkMode)
-                .frame(minHeight: 260)
-                .padding(12)
-                .background(
-                    editorShape.fill(editorBackground)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22)
+                .fill(cardBackground)
+                .overlay(
+                    LinearGradient(
+                        colors: [accent.opacity(isDarkMode ? 0.16 : 0.12), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
                 )
                 .overlay(
-                    editorShape.stroke(editorStroke, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(cardStroke, lineWidth: 1)
                 )
-        }
-        .background(
-            cardShape.fill(cardBackground)
-        )
-        .overlay(
-            cardShape.stroke(cardStroke, lineWidth: 1)
         )
         .shadow(color: cardShadow, radius: 18, x: 0, y: 8)
     }
     
-    private func toolbarButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        let inactiveFill = isDarkMode ? Color.black.opacity(0.3) : Color.white.opacity(0.9)
-        let activeFill = isDarkMode ? Color.white.opacity(0.22) : Color.black.opacity(0.12)
-        let activeStroke = isDarkMode ? Color.white.opacity(0.35) : Color.black.opacity(0.2)
-        return Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(isDarkMode ? .white : .black)
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isActive ? activeFill : inactiveFill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(isActive ? activeStroke : .clear, lineWidth: 1)
-                        )
+    private func formattingToolbar(accent: Color) -> some View {
+        let toolbarFill = isDarkMode
+            ? Color(red: 0.16, green: 0.19, blue: 0.24, opacity: 0.9)
+            : Color(red: 0.9, green: 0.93, blue: 0.96)
+        let toolbarStroke = isDarkMode
+            ? Color(red: 0.24, green: 0.3, blue: 0.38, opacity: 0.6)
+            : Color(red: 0.64, green: 0.7, blue: 0.8, opacity: 0.5)
+        
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                fontMenu
+                sizeControl
+                lineSpacingDropdown
+                formattingStyleButtons
+                Spacer()
+                alignmentControls
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(toolbarFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(toolbarStroke, lineWidth: 1)
                 )
+        )
+    }
+    
+    private var fontMenu: some View {
+        let label = fontDisplayName(for: controller.fontName)
+        return Menu {
+            ForEach(fontFamilies, id: \.self) { font in
+                Button {
+                    controller.applyFont(named: font)
+                } label: {
+                    let isCurrent = fontDisplayName(for: controller.fontName) == fontDisplayName(for: font)
+                    Label(fontDisplayName(for: font), systemImage: isCurrent ? "checkmark" : "")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "textformat.alt")
+                Text(label)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isDarkMode ? Color.white.opacity(0.08) : Color.white)
+            )
+        }
+        .menuStyle(.borderlessButton)
+    }
+    
+    private var sizeControl: some View {
+        HStack(spacing: 6) {
+            toolbarIconButton(icon: "minus", label: nil, isActive: false, minWidth: 28) {
+                controller.adjustFontSize(by: -1)
+            }
+            Text("\(Int(controller.fontSize)) pt")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .frame(minWidth: 50)
+            toolbarIconButton(icon: "plus", label: nil, isActive: false, minWidth: 28) {
+                controller.adjustFontSize(by: 1)
+            }
+        }
+    }
+    
+    private var lineSpacingDropdown: some View {
+        let current = presetLabel(controller.lineHeightMultiple)
+        return Menu {
+            ForEach(lineSpacingPresets, id: \.self) { preset in
+                let active = abs(controller.lineHeightMultiple - preset) < 0.01
+                Button {
+                    controller.setLineHeight(preset)
+                } label: {
+                    HStack {
+                        Text("\(presetLabel(preset))×")
+                        if active {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease")
+                Text("\(current)× spacing")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isDarkMode ? Color.white.opacity(0.08) : Color.white)
+            )
+        }
+        .menuStyle(.borderlessButton)
+    }
+    
+    private var alignmentControls: some View {
+        HStack(spacing: 6) {
+            toolbarIconButton(icon: "text.alignleft", label: nil, isActive: controller.alignment == .left, action: { controller.setAlignment(.left) })
+            toolbarIconButton(icon: "text.aligncenter", label: nil, isActive: controller.alignment == .center, action: { controller.setAlignment(.center) })
+            toolbarIconButton(icon: "text.alignright", label: nil, isActive: controller.alignment == .right, action: { controller.setAlignment(.right) })
+            toolbarIconButton(icon: "text.justify", label: nil, isActive: controller.alignment == .justified, action: { controller.setAlignment(.justified) })
+            toolbarIconButton(icon: "arrow.counterclockwise", label: "Reset", isActive: false, minWidth: 64) {
+                controller.clearFormatting()
+            }
+        }
+    }
+    
+    private var formattingStyleButtons: some View {
+        HStack(spacing: 6) {
+            toolbarIconButton(icon: "bold", label: nil, isActive: controller.isBold, action: controller.toggleBold)
+            toolbarIconButton(icon: "italic", label: nil, isActive: controller.isItalic, action: controller.toggleItalic)
+            toolbarIconButton(icon: "underline", label: nil, isActive: controller.isUnderline, action: controller.toggleUnderline)
+            toolbarIconButton(icon: "strikethrough", label: nil, isActive: controller.isStrikethrough, action: controller.toggleStrikethrough)
+        }
+    }
+    
+    private func editorCanvas(documentBackground: Color, documentStroke: Color, accent: Color) -> some View {
+        let topBar = LinearGradient(
+            colors: [accent.opacity(isDarkMode ? 0.32 : 0.2), .clear],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Capsule()
+                    .fill(topBar)
+                    .frame(width: 120, height: 6)
+                Spacer()
+                Capsule()
+                    .fill(topBar.opacity(0.4))
+                    .frame(width: 60, height: 6)
+            }
+            .padding(.horizontal, 4)
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(documentBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(documentStroke, lineWidth: 1)
+                    )
+                VStack(alignment: .leading, spacing: 0) {
+                    RichTextEditor(text: $richText, controller: controller, isDarkMode: isDarkMode)
+                        .frame(minHeight: 280)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 16)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(accent.opacity(0.08), lineWidth: 2)
+            )
+        }
+    }
+    
+    private func toolbarIconButton(icon: String, label: String?, isActive: Bool, minWidth: CGFloat = 30, action: @escaping () -> Void) -> some View {
+        let accent = Color(red: 0.32, green: 0.72, blue: 1.0)
+        let inactiveFill = isDarkMode ? Color.white.opacity(0.08) : Color.white
+        let activeFill = isDarkMode ? accent.opacity(0.24) : accent.opacity(0.16)
+        return Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                if let label {
+                    Text(label)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
+            }
+            .foregroundColor(isDarkMode ? .white : .black)
+            .padding(.vertical, 8)
+            .frame(minWidth: minWidth)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isActive ? activeFill : inactiveFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(isActive ? accent.opacity(0.45) : Color.black.opacity(isDarkMode ? 0.05 : 0.06), lineWidth: 1)
+                    )
+            )
         }
         .buttonStyle(.plain)
+    }
+
+    private func fontDisplayName(for name: String) -> String {
+        if let font = NSFont(name: name, size: controller.fontSize) {
+            return font.displayName ?? font.familyName ?? name
+        }
+        if name.contains(".SFNS") {
+            return "SF Pro"
+        }
+        return name
+    }
+    
+    private func presetLabel(_ preset: CGFloat) -> String {
+        if preset == floor(preset) {
+            return String(format: "%.0f", preset)
+        }
+        return String(format: "%.2f", Double(preset))
     }
 }
 
@@ -530,15 +867,22 @@ struct HumanizeSettingsView: View {
     @ObservedObject var settings: TypeBotSettings
     
     var body: some View {
-        let panelFill = settings.isDarkMode ? Color.black.opacity(0.72) : Color.white.opacity(0.92)
-        let panelStroke = settings.isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.1)
+        let panelFill = LinearGradient(
+            colors: settings.isDarkMode
+            ? [Color(red: 0.08, green: 0.08, blue: 0.14), Color.black.opacity(0.92)]
+            : [Color.white, Color(red: 0.95, green: 0.97, blue: 1.0)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        let panelStroke = settings.isDarkMode ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
         let titleColor = settings.isDarkMode ? Color.white : Color.black
         let secondary = settings.isDarkMode ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
+        let accent = Color(red: 0.32, green: 0.72, blue: 1.0)
         
         VStack(spacing: 18) {
             HStack {
                 Text("Realistic Settings")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
                     .foregroundColor(titleColor)
                 Spacer()
                 Button {
@@ -563,11 +907,11 @@ struct HumanizeSettingsView: View {
                         Toggle(isOn: $settings.humanizeUltraRun) {
                             Text("Ultra-run")
                         }
-                        settingsActionButton(title: "Randomize", systemImage: "shuffle") {
+                        settingsActionButton(title: "Randomize", systemImage: "shuffle", accent: accent) {
                             settings.randomizeHumanizeSettings()
                         }
                         Text("Adds long thinking pauses and slower pacing for essay-like writing.")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundColor(secondary)
                     }
                     
@@ -654,10 +998,10 @@ struct HumanizeSettingsView: View {
                     }
                     
                     Text("Changes apply to new runs. Keep the target app focused while testing.")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(secondary)
                     
-                    settingsActionButton(title: "Reset to Defaults", systemImage: "arrow.counterclockwise") {
+                    settingsActionButton(title: "Reset to Defaults", systemImage: "arrow.counterclockwise", accent: accent) {
                         settings.resetHumanizeSettingsToDefaults()
                     }
                 }
@@ -673,21 +1017,28 @@ struct HumanizeSettingsView: View {
                         .stroke(panelStroke, lineWidth: 1)
                 )
         )
+        .shadow(color: settings.isDarkMode ? .black.opacity(0.5) : .black.opacity(0.12), radius: 26, x: 0, y: 12)
         .foregroundColor(settings.isDarkMode ? .white : .black)
     }
     
     private func settingsSection(title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let fill = settings.isDarkMode ? Color.white.opacity(0.06) : Color.white.opacity(0.9)
+        let stroke = settings.isDarkMode ? Color.white.opacity(0.14) : Color.black.opacity(0.08)
+        return VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(settings.isDarkMode ? .white.opacity(0.8) : .black.opacity(0.7))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(settings.isDarkMode ? .white.opacity(0.82) : .black.opacity(0.7))
             VStack(alignment: .leading, spacing: 12) {
                 content()
             }
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(settings.isDarkMode ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
+                    .fill(fill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(stroke, lineWidth: 1)
+                    )
             )
         }
     }
@@ -704,8 +1055,7 @@ struct HumanizeSettingsView: View {
         }
     }
 
-    private func settingsActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        let accent = settings.isDarkMode ? Color.white.opacity(0.2) : Color.black.opacity(0.1)
+    private func settingsActionButton(title: String, systemImage: String, accent: Color, action: @escaping () -> Void) -> some View {
         let stroke = settings.isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
         return Button(action: action) {
             HStack(spacing: 6) {
@@ -714,13 +1064,19 @@ struct HumanizeSettingsView: View {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
             }
-            .foregroundColor(settings.isDarkMode ? .white : .black)
+            .foregroundColor(.white)
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, alignment: .center)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(accent)
+                    .fill(
+                        LinearGradient(
+                            colors: [accent.opacity(0.75), accent.opacity(0.45)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(stroke, lineWidth: 1)
@@ -754,52 +1110,6 @@ struct HumanizeSettingsView: View {
     }
 }
 
-struct HumanizePreloadView: View {
-    let isDarkMode: Bool
-    let progress: Double
-    let message: String
-
-    var body: some View {
-        let panelFill = isDarkMode ? Color.black.opacity(0.78) : Color.white.opacity(0.92)
-        let panelStroke = isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.1)
-        let titleColor = isDarkMode ? Color.white : Color.black
-        let secondary = isDarkMode ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
-        let barBackground = isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
-        let barFill = isDarkMode ? Color.white.opacity(0.9) : Color.black.opacity(0.75)
-        let percent = Int((progress * 100).rounded())
-
-        VStack(spacing: 16) {
-            Text("Loading Realistic Settings")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(titleColor)
-
-            VStack(spacing: 10) {
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(barBackground)
-                        .frame(height: 10)
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(barFill)
-                        .frame(width: max(16, CGFloat(progress) * 280), height: 10)
-                }
-                Text("\(message) • \(percent)%")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(secondary)
-            }
-        }
-        .padding(22)
-        .frame(maxWidth: 420)
-        .background(
-            RoundedRectangle(cornerRadius: 22)
-                .fill(panelFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(panelStroke, lineWidth: 1)
-                )
-        )
-    }
-}
-
 struct AccessibilityPromptView: View {
     @Binding var isPresented: Bool
     let isDarkMode: Bool
@@ -810,12 +1120,13 @@ struct AccessibilityPromptView: View {
         let panelStroke = isDarkMode ? Color.white.opacity(0.15) : Color.black.opacity(0.12)
         let textColor = isDarkMode ? Color.white : Color.black
         let secondary = isDarkMode ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
+        let accent = Color(red: 0.32, green: 0.72, blue: 1.0)
         
         VStack(spacing: 16) {
             Text("Enable Accessibility")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 20, weight: .heavy, design: .rounded))
             Text("Type Bot needs Accessibility permission to type into other apps.")
-                .font(.system(size: 13))
+                .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundColor(secondary)
                 .multilineTextAlignment(.center)
             
@@ -829,6 +1140,7 @@ struct AccessibilityPromptView: View {
                     onOpenSettings()
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(accent)
             }
         }
         .padding(22)

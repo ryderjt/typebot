@@ -8,16 +8,38 @@ struct SettingsPanelView: View {
     @State private var hasAccessibility = AXIsProcessTrusted()
     
     var body: some View {
-        let panelFill = settings.isDarkMode ? Color.black.opacity(0.72) : Color.white.opacity(0.92)
-        let panelStroke = settings.isDarkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.1)
+        let panelFill = LinearGradient(
+            colors: settings.isDarkMode
+            ? [Color(red: 0.08, green: 0.08, blue: 0.14), Color.black.opacity(0.88)]
+            : [Color.white, Color(red: 0.95, green: 0.97, blue: 1.0)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        let panelStroke = settings.isDarkMode ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
         let titleColor = settings.isDarkMode ? Color.white : Color.black
         let secondary = settings.isDarkMode ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
+        let accent = Color(red: 0.32, green: 0.72, blue: 1.0)
         
         VStack(spacing: 18) {
             HStack {
-                Text("Settings")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(titleColor)
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(accent.opacity(0.15))
+                        Image(systemName: "gearshape.2.fill")
+                            .foregroundColor(accent)
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Settings")
+                            .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        Text("Speed, shortcuts, and permissions")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(secondary)
+                    }
+                }
+                .foregroundColor(titleColor)
                 Spacer()
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -37,13 +59,6 @@ struct SettingsPanelView: View {
             
             ScrollView {
                 VStack(spacing: 16) {
-                    settingsSection(title: "Appearance") {
-                        Toggle(isOn: $settings.isDarkMode) {
-                            Label("Dark Mode", systemImage: "moon.fill")
-                        }
-                        .toggleStyle(SwitchToggleStyle(tint: .blue))
-                    }
-                    
                     settingsSection(title: "Typing") {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
@@ -118,6 +133,7 @@ struct SettingsPanelView: View {
                         .stroke(panelStroke, lineWidth: 1)
                 )
         )
+        .shadow(color: settings.isDarkMode ? .black.opacity(0.5) : .black.opacity(0.12), radius: 26, x: 0, y: 12)
         .foregroundColor(settings.isDarkMode ? .white : .black)
         .onAppear {
             hasAccessibility = AXIsProcessTrusted()
@@ -125,17 +141,23 @@ struct SettingsPanelView: View {
     }
     
     private func settingsSection(title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let fill = settings.isDarkMode ? Color.white.opacity(0.06) : Color.white.opacity(0.9)
+        let stroke = settings.isDarkMode ? Color.white.opacity(0.14) : Color.black.opacity(0.08)
+        return VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(settings.isDarkMode ? .white.opacity(0.8) : .black.opacity(0.7))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(settings.isDarkMode ? .white.opacity(0.82) : .black.opacity(0.7))
             VStack(alignment: .leading, spacing: 12) {
                 content()
             }
             .padding(14)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(settings.isDarkMode ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
+                    .fill(fill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(stroke, lineWidth: 1)
+                    )
             )
         }
     }
