@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		DE16B9692F118B020002764A /* Type Bot */ = {
+		DE16B9692F118B020002764A /* TypeBot */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DE16B9752F118B030002764A /* Build configuration list for PBXNativeTarget "Type Bot" */;
+			buildConfigurationList = DE16B9752F118B030002764A /* Build configuration list for PBXNativeTarget "TypeBot" */;
 			buildPhases = (
 				DE16B9662F118B020002764A /* Sources */,
 				DE16B9672F118B020002764A /* Frameworks */,
@@ -63,7 +63,7 @@
 			fileSystemSynchronizedGroups = (
 				DE16B96C2F118B020002764A /* TypeBot */,
 			);
-			name = "Type Bot";
+			name = TypeBot;
 			packageProductDependencies = (
 			);
 			productName = "Type Bot";
@@ -85,7 +85,7 @@
 					};
 				};
 			};
-			buildConfigurationList = DE16B9652F118B020002764A /* Build configuration list for PBXProject "Type Bot" */;
+			buildConfigurationList = DE16B9652F118B020002764A /* Build configuration list for PBXProject "TypeBot" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				DE16B9692F118B020002764A /* Type Bot */,
+				DE16B9692F118B020002764A /* TypeBot */,
 			);
 		};
 /* End PBXProject section */
@@ -314,7 +314,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		DE16B9652F118B020002764A /* Build configuration list for PBXProject "Type Bot" */ = {
+		DE16B9652F118B020002764A /* Build configuration list for PBXProject "TypeBot" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DE16B9732F118B030002764A /* Debug */,
@@ -323,7 +323,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DE16B9752F118B030002764A /* Build configuration list for PBXNativeTarget "Type Bot" */ = {
+		DE16B9752F118B030002764A /* Build configuration list for PBXNativeTarget "TypeBot" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DE16B9762F118B030002764A /* Debug */,
