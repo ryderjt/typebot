@@ -11,9 +11,9 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		DE16B96C2F118B020002764A /* Type Bot */ = {
+		DE16B96C2F118B020002764A /* TypeBot */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Type Bot";
+			path = TypeBot;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		DE16B9612F118B020002764A = {
 			isa = PBXGroup;
 			children = (
-				DE16B96C2F118B020002764A /* Type Bot */,
+				DE16B96C2F118B020002764A /* TypeBot */,
 				DE16B96B2F118B020002764A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,7 +61,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				DE16B96C2F118B020002764A /* Type Bot */,
+				DE16B96C2F118B020002764A /* TypeBot */,
 			);
 			name = "Type Bot";
 			packageProductDependencies = (
@@ -266,7 +266,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "ryderjt.Type-Bot";
+				PRODUCT_BUNDLE_IDENTIFIER = ryderjt.TypeBot;
 				PRODUCT_NAME = TypeBot;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -299,7 +299,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "ryderjt.Type-Bot";
+				PRODUCT_BUNDLE_IDENTIFIER = ryderjt.TypeBot;
 				PRODUCT_NAME = TypeBot;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
